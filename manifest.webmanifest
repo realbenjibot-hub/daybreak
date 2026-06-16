@@ -1,0 +1,15 @@
+{
+  "name": "Daybreak — Personal OS",
+  "short_name": "Daybreak",
+  "description": "Your daily operating system. Wake. Move. Build. Live.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#050505",
+  "theme_color": "#050505",
+  "icons": [
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

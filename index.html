@@ -1421,5 +1421,13 @@
   setInterval(setGreeting, 60000);
 })();
 </script>
+  <script>
+    /* register the offline service worker (no-op on file:// / unsupported browsers) */
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("sw.js").catch(function () {});
+      });
+    }
+  </script>
 </body>
 </html>

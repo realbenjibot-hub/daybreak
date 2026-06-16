@@ -85,7 +85,12 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
-  .wrap { position: relative; z-index: var(--z-base); max-width: 1180px; margin: 0 auto; padding: clamp(20px, 4vw, 44px) clamp(16px, 4vw, 40px) 80px; }
+  .wrap { position: relative; z-index: var(--z-base); max-width: 1180px; margin: 0 auto;
+    padding:
+      calc(clamp(20px, 4vw, 44px) + env(safe-area-inset-top))
+      calc(clamp(16px, 4vw, 40px) + env(safe-area-inset-right))
+      calc(80px + env(safe-area-inset-bottom))
+      calc(clamp(16px, 4vw, 40px) + env(safe-area-inset-left)); }
 
   /* ===== Topbar ===== */
   .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; flex-wrap: wrap; animation: rise 0.7s var(--ease) both; }

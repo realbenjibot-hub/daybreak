@@ -746,24 +746,31 @@
   var Wave = (function () {
     var canvas = document.getElementById("bg"), ctx = canvas.getContext("2d");
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
-    var W = 0, H = 0, nodes = [], waves = [], streams = [], ripples = [];
+    var W = 0, H = 0, nodes = [], waves = [], streams = [], ripples = [], shoots = [];
     var intensity = 0, target = 0, pointer = { x: -9999, y: -9999, active: false };
-    var running = true, raf = null;
+    var running = true, raf = null, lastW = 0, rzTimer = null;
+    // touch / small screens get a livelier background; desktop is left exactly as it was
+    var MOBILE = !!(window.matchMedia && (window.matchMedia("(pointer: coarse)").matches || window.matchMedia("(max-width: 760px)").matches));
     function rand(a, b) { return a + Math.random() * (b - a); }
 
-    function build() {
+    function resize() {
       W = window.innerWidth; H = window.innerHeight;
       canvas.width = W * dpr; canvas.height = H * dpr;
       canvas.style.width = W + "px"; canvas.style.height = H + "px";
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      var count = Math.round(Math.min(80, Math.max(26, (W * H) / 27000)));
+    }
+    function seed() {
+      var count = MOBILE
+        ? Math.round(Math.min(74, Math.max(48, (W * H) / 8000)))   // denser on phones so it reads as alive
+        : Math.round(Math.min(80, Math.max(26, (W * H) / 27000))); // desktop: unchanged
+      var vmax = MOBILE ? 0.3 : 0.12;                              // faster drift on phones (no cursor to stir it)
       nodes = [];
-      for (var i = 0; i < count; i++) nodes.push({ x: Math.random() * W, y: Math.random() * H, vx: rand(-0.12, 0.12), vy: rand(-0.12, 0.12), ix: 0, iy: 0 });
+      for (var i = 0; i < count; i++) nodes.push({ x: Math.random() * W, y: Math.random() * H, vx: rand(-vmax, vmax), vy: rand(-vmax, vmax), ix: 0, iy: 0 });
       waves = [];
       for (var w = 0; w < 3; w++) waves.push({ y: rand(0.18, 0.85) * H, amp: rand(16, 44), len: rand(0.004, 0.0085), sp: rand(0.00028, 0.00062) * (w % 2 ? 1 : -1), ph: Math.random() * 6, c: w === 1 });
       streams = [];
-      if (REDUCE) draw(0);
     }
+    function build() { resize(); seed(); lastW = W; }
     function setIntensity(v) { target = Math.max(0, Math.min(1, v)); }
     function pulse(x, y, cyan) {
       ripples.push({ x: x, y: y, r: 6, max: rand(190, 270), a: 0.5, c: cyan });
@@ -811,7 +818,7 @@
       }
 
       // matrix data-streams — thin out as you "escape" (high intensity)
-      if (!REDUCE && Math.random() < 0.055 * (1 - intensity) + 0.006) streams.push({ x: Math.random() * W, y: -rand(20, 160), len: rand(60, 150), sp: rand(1.5, 3.2), a: rand(0.05, 0.13) });
+      if ((!REDUCE || MOBILE) && Math.random() < 0.055 * (1 - intensity) + 0.006) streams.push({ x: Math.random() * W, y: -rand(20, 160), len: rand(60, 150), sp: rand(1.5, 3.2), a: rand(0.05, 0.13) });
       for (var s = streams.length - 1; s >= 0; s--) {
         var st = streams[s]; st.y += st.sp;
         var grad = ctx.createLinearGradient(st.x, st.y - st.len, st.x, st.y);
@@ -819,6 +826,17 @@
         ctx.strokeStyle = grad; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(st.x, st.y - st.len); ctx.lineTo(st.x, st.y); ctx.stroke();
         ctx.fillStyle = "rgba(224,255,140," + Math.min(0.5, st.a * 1.8).toFixed(3) + ")"; ctx.fillRect(st.x - 0.6, st.y - 1, 1.3, 3);
         if (st.y - st.len > H) streams.splice(s, 1);
+      }
+      // shooting stars (mobile delight — desktop left as-is)
+      if (MOBILE && Math.random() < 0.013) shoots.push({ x: rand(0, W), y: rand(0, H * 0.45), vx: rand(3.5, 6.5) * (Math.random() < 0.5 ? 1 : -1), vy: rand(2, 3.6), life: 1, len: rand(70, 130) });
+      for (var sc = shoots.length - 1; sc >= 0; sc--) {
+        var sh = shoots[sc]; sh.x += sh.vx; sh.y += sh.vy; sh.life -= 0.011;
+        if (sh.life <= 0 || sh.y > H + 50 || sh.x < -70 || sh.x > W + 70) { shoots.splice(sc, 1); continue; }
+        var sang = Math.atan2(sh.vy, sh.vx), tx = sh.x - Math.cos(sang) * sh.len, ty = sh.y - Math.sin(sang) * sh.len;
+        var sg = ctx.createLinearGradient(tx, ty, sh.x, sh.y);
+        sg.addColorStop(0, "rgba(91,231,255,0)"); sg.addColorStop(1, "rgba(190,255,120," + (0.6 * sh.life).toFixed(3) + ")");
+        ctx.strokeStyle = sg; ctx.lineWidth = 1.7; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(sh.x, sh.y); ctx.stroke();
+        ctx.fillStyle = "rgba(225,255,150," + (0.85 * sh.life).toFixed(3) + ")"; ctx.beginPath(); ctx.arc(sh.x, sh.y, 1.9, 0, 6.2832); ctx.fill();
       }
       // ripples (energy pulses)
       for (var r2 = ripples.length - 1; r2 >= 0; r2--) {
@@ -829,14 +847,18 @@
       }
       ctx.globalCompositeOperation = "source-over";
     }
-    function loop(t) { if (!running) return; draw(t); raf = requestAnimationFrame(loop); }
-    window.addEventListener("resize", build);
+    function loop(t) { if (!running) return; try { draw(t); } catch (e) {} raf = requestAnimationFrame(loop); }
+    window.addEventListener("resize", function () {
+      // iOS fires resize when the address bar shows/hides — only re-seed on a real width change, so nodes don't reset/glitch
+      clearTimeout(rzTimer);
+      rzTimer = setTimeout(function () { resize(); if (Math.abs(W - lastW) > 80) { lastW = W; seed(); } }, 200);
+    });
     document.addEventListener("visibilitychange", function () {
       if (document.hidden) { running = false; if (raf) cancelAnimationFrame(raf); }
-      else if (!REDUCE) { running = true; raf = requestAnimationFrame(loop); }
+      else if (!running) { running = true; raf = requestAnimationFrame(loop); }
     });
     build();
-    if (!REDUCE) raf = requestAnimationFrame(loop); else draw(0);
+    raf = requestAnimationFrame(loop); // always animate; reduce-motion still skips the loud UI animations via CSS
     return { setIntensity: setIntensity, pulse: pulse, setPointer: setPointer };
   })();
 

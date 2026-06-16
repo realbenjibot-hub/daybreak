@@ -442,7 +442,13 @@
     *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
     .core-glow, .mark .led, .rcell .rv .dot { animation: none !important; }
     .heatmap.reveal .hcell { animation: none; }
-    #boot { display: none; } /* skip the boot animation for reduced-motion */
+    /* the boot splash is a brief, self-dismissing intro the user explicitly wants — let it animate even here */
+    #boot .boot-logo { animation: bootLogo 0.7s var(--ease) both !important; }
+    #boot .boot-word { animation: bootFade 0.6s var(--ease) 0.25s both !important; }
+    #boot .boot-bar { animation: bootFade 0.4s var(--ease) 0.45s both !important; }
+    #boot .boot-bar i { animation: bootFill 0.85s var(--ease) 0.5s forwards !important; }
+    #boot .boot-status { animation: bootFade 0.5s ease 0.6s both !important; }
+    #boot .boot-rain span { animation-name: bootRain !important; animation-timing-function: linear !important; animation-iteration-count: infinite !important; animation-duration: 1.4s !important; }
   }
 </style>
 </head>
@@ -481,8 +487,7 @@
         b.style.opacity = "0"; b.style.transform = "scale(1.04)"; b.style.pointerEvents = "none";
         setTimeout(function () { if (b && b.parentNode) b.parentNode.removeChild(b); }, 520);
       }
-      var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      setTimeout(go, reduce ? 150 : 1550);
+      setTimeout(go, 1550);
       ["pointerdown", "keydown"].forEach(function (ev) { document.addEventListener(ev, go, { once: true, passive: true }); });
     })();
   </script>

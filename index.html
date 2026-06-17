@@ -261,6 +261,16 @@
   .orb.sun.on svg { stroke: #0a0710; }
   .orb.moon.flash { animation: moonPulse 0.6s var(--ease); }
   .orb.sun.flash { animation: sunPulse 0.6s var(--ease); }
+  .rec-cell .orb.moon { cursor: default; pointer-events: none; }
+  .bed-now { display: flex; align-items: center; gap: 11px; width: 100%; margin-top: 12px; padding: 13px 16px; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; color: var(--ink); font-family: var(--body); background: linear-gradient(120deg, rgba(var(--indigo-rgb), 0.08), transparent 60%), var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), transform 0.12s var(--ease); }
+  .bed-now svg { width: 21px; height: 21px; flex: none; }
+  .bed-now .bn-label { font-weight: 600; font-size: 14.5px; }
+  .bed-now .bn-hint { margin-left: auto; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); white-space: nowrap; }
+  .bed-now:hover { border-color: rgba(var(--indigo-rgb), 0.5); transform: translateY(-1px); box-shadow: 0 0 0 4px rgba(var(--indigo-rgb), 0.07); }
+  .bed-now:focus-visible { outline: 2px solid var(--indigo); outline-offset: 2px; }
+  .bed-now.set { border-color: rgba(var(--indigo-rgb), 0.42); box-shadow: inset 0 0 26px rgba(var(--indigo-rgb), 0.06); }
+  .bed-now.set svg { filter: drop-shadow(0 0 7px rgba(var(--indigo-rgb), 0.6)); }
+  .bed-now.flash { animation: moonPulse 0.6s var(--ease); }
   .bedtime { display: flex; align-items: center; gap: 8px; }
   .mini.bednum { width: 72px; text-align: center; font-size: 14px; }
   .ampm { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
@@ -923,10 +933,24 @@
     var sb = splitBed(day.sleep ? day.sleep.bed : "");
     var hasBed = !!(day.sleep && day.sleep.bed && parseClock(day.sleep.bed) != null);
     var wake = day.wakeTime ? esc(day.wakeTime) : (day.started ? "Online" : "Tap when up");
+    // "Going to bed" forward-log: a bedtime logged now belongs to the sleep that ends the
+    // NEXT morning — evening taps go to tomorrow's record, after-midnight taps to today's.
+    var bedNow = "";
+    if (currentKey === todayKey()) {
+      var upKey = (new Date().getHours() >= 12) ? keyOf(addDays(new Date(), 1)) : todayKey();
+      var upBed = (state.days[upKey] && state.days[upKey].sleep) ? state.days[upKey].sleep.bed : "";
+      var setNow = !!(upBed && parseClock(upBed) != null);
+      bedNow =
+        '<button class="bed-now ' + (setNow ? "set" : "") + '" data-action="bed-now" aria-label="I am going to bed now">' +
+          MOON +
+          '<span class="bn-label">' + (setNow ? ("Lights out · " + esc(upBed)) : "I’m going to bed") + '</span>' +
+          '<span class="bn-hint">' + (setNow ? "logged · tap to update" : "logs tonight’s sleep") + '</span>' +
+        '</button>';
+    }
     return '<div class="recovery">' +
       '<div class="rec-pair">' +
         '<div class="rec-cell">' +
-          '<button class="orb moon ' + (hasBed ? "set" : "") + '" data-action="log-bed" title="Tap when you turn in — stamps tonight\'s bedtime" aria-label="Log bedtime now">' + MOON + '</button>' +
+          '<span class="orb moon ' + (hasBed ? "set" : "") + '" aria-hidden="true">' + MOON + '</span>' +
           '<div class="rec-info"><span class="rl">Bedtime</span>' +
             '<div class="bedtime">' +
               '<input class="mini bednum" data-field="sleep-bednum" placeholder="9:30" value="' + esc(sb.t) + '" inputmode="numeric" aria-label="Bedtime" />' +
@@ -947,6 +971,7 @@
           '<div class="sl-text"><span class="sl-time">--</span><span class="sl-stat">log bedtime</span></div></div>' +
         '<span class="rec-msg">' + (day.started ? "You\'re online — the day is yours." : "Tap the sun when you\'re up.") + '</span>' +
       '</div>' +
+      bedNow +
     "</div>";
   }
 
@@ -1284,7 +1309,7 @@
         if (a) { a.d = !a.d; pulse(t); if (a.d) energize(t, false); save(); t.classList.toggle("on", a.d); t.closest(".also-item").classList.toggle("done", a.d); updateDerived(); }
         return;
       }
-      case "log-bed": logBedtimeNow(); return;
+      case "bed-now": goingToBedNow(); return;
       case "ampm": {
         var grp = t.parentNode;
         var btns = grp.getElementsByTagName("button");
@@ -1308,16 +1333,20 @@
     if (cell && (e.key === " " || e.key === "Enter")) { e.preventDefault(); cell.click(); }
   });
 
-  function logBedtimeNow() {
-    var day = getDay(currentKey);
-    day.sleep.bed = nowTime(); // stamp the current time as bedtime on the day you're viewing
+  function goingToBedNow() {
+    // log "now" as bedtime for the sleep that ends the NEXT morning:
+    // evening -> tomorrow's record (so it's waiting when you wake), after-midnight -> today's
+    var now = new Date();
+    var key = now.getHours() >= 12 ? keyOf(addDays(now, 1)) : todayKey();
+    var d = getDay(key);
+    d.sleep.bed = nowTime();
     save();
     render();
     if (!REDUCE) {
-      var m = document.querySelector(".orb.moon");
-      if (m) { m.classList.add("flash"); var r = m.getBoundingClientRect(); Wave.pulse(r.left + r.width / 2, r.top + r.height / 2, true); }
+      var btn = document.querySelector(".bed-now");
+      if (btn) { btn.classList.add("flash"); var r = btn.getBoundingClientRect(); Wave.pulse(r.left + r.width / 2, r.top + r.height / 2, true); }
     }
-    toast("Bedtime logged · " + day.sleep.bed);
+    toast("Goodnight, " + NAME + " · lights out " + d.sleep.bed + (key === todayKey() ? "" : " — see you in the morning"));
   }
 
   function addAlso() {

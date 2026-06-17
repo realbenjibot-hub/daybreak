@@ -51,7 +51,7 @@
     transition: --intensity 1.2s ease;
 
     /* z-index scale */
-    --z-bg: 0; --z-base: 1; --z-sticky: 20; --z-toast: 60; --z-tooltip: 70; --z-boot: 100;
+    --z-bg: 0; --z-base: 1; --z-sticky: 20; --z-toast: 60; --z-tooltip: 70; --z-celebrate: 90; --z-boot: 100;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -413,6 +413,14 @@
   @keyframes bootFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
   @keyframes bootFill { from { width: 0; } to { width: 100%; } }
   @keyframes bootRain { to { transform: translateY(640%); } }
+
+  /* ===== day-complete celebration ===== */
+  .celebrate-cv { position: fixed; inset: 0; z-index: var(--z-celebrate); pointer-events: none; }
+  .celebrate-msg { position: fixed; inset: 0; z-index: calc(var(--z-celebrate) + 1); display: grid; place-items: center; pointer-events: none; text-align: center; padding: 24px; opacity: 1; transition: opacity 0.55s ease; }
+  .celebrate-msg.out { opacity: 0; }
+  .celebrate-msg .cm-big { font-family: var(--display); font-weight: 700; font-size: clamp(42px, 13vw, 96px); letter-spacing: -0.02em; color: #fff; text-shadow: 0 0 34px rgba(var(--lime-rgb), 0.65); animation: cmIn 0.55s var(--ease) both; }
+  .celebrate-msg .cm-sub { font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--lime); margin-top: 14px; animation: cmIn 0.55s var(--ease) 0.14s both; }
+  @keyframes cmIn { from { opacity: 0; transform: translateY(16px) scale(0.9); } to { opacity: 1; transform: none; } }
 
   @keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes cellIn { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: scale(1); } }
@@ -1205,6 +1213,11 @@
 
     document.getElementById("loggedTag").textContent = dl + " days logged";
     updateUptime();
+
+    // day-complete eruption — fire once when today crosses into "complete" (not on initial load)
+    var isComplete = currentKey === todayKey() && s.total > 0 && s.pct >= 0.9;
+    if (isComplete && !wasComplete && !fromRender) celebrate();
+    wasComplete = isComplete;
   }
 
   function setLed(id, cls) { var el = document.getElementById(id); if (!el) return; el.classList.remove("live", "cyan"); if (cls) el.classList.add(cls); }
@@ -1224,11 +1237,57 @@
     if (tip) tip.textContent = DOW[d.getDay()] + " " + (d.getMonth() + 1) + "/" + d.getDate() + " · " + Math.round(pct * 100) + "%";
   }
 
-  var coreCurrent = 0;
+  var coreCurrent = 0, wasComplete = false;
   function paintCore(pct) {
     var C = 414.7, fill = document.getElementById("ringFill"), txt = document.getElementById("ringPct");
     tween(coreCurrent, pct, 900, function (v) { fill.setAttribute("stroke-dashoffset", (C * (1 - v)).toFixed(1)); txt.textContent = Math.round(v * 100) + "%"; });
     coreCurrent = pct;
+  }
+
+  /* ---------- day-complete celebration ("UNPLUGGED") ---------- */
+  function scramble(el, target, dur) {
+    if (REDUCE) { el.textContent = target; return; }
+    var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ0123456789#%@", start = null;
+    function step(ts) {
+      if (start === null) start = ts;
+      var t = Math.min(1, (ts - start) / dur), locked = Math.floor(t * target.length), s = "";
+      for (var i = 0; i < target.length; i++) s += i < locked ? target.charAt(i) : chars.charAt(Math.floor(Math.random() * chars.length));
+      el.textContent = s;
+      if (t < 1) requestAnimationFrame(step); else el.textContent = target;
+    }
+    requestAnimationFrame(step);
+  }
+  function celebrate() {
+    var msg = document.createElement("div");
+    msg.className = "celebrate-msg";
+    msg.innerHTML = '<div><div class="cm-big">UNPLUGGED</div><div class="cm-sub">Day complete · you’re free</div></div>';
+    document.body.appendChild(msg);
+    scramble(msg.querySelector(".cm-big"), "UNPLUGGED", 700);
+    setTimeout(function () { msg.classList.add("out"); }, 2000);
+    setTimeout(function () { if (msg.parentNode) msg.parentNode.removeChild(msg); }, 2600);
+    if (REDUCE) return;
+
+    var cv = document.createElement("canvas");
+    cv.className = "celebrate-cv";
+    document.body.appendChild(cv);
+    var ctx = cv.getContext("2d"), dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var W = window.innerWidth, H = window.innerHeight;
+    cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var cx = W / 2, cy = H * 0.42, parts = [], rings = [{ r: 6, a: 0.85 }];
+    for (var i = 0; i < 90; i++) { var a = Math.random() * 6.2832, sp = 2 + Math.random() * 7.5; parts.push({ x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, r: 1 + Math.random() * 2.6, cyan: Math.random() < 0.4 }); }
+    try { Wave.pulse(cx, cy, false); Wave.pulse(cx, cy, true); } catch (e) {}
+    var start = null, raf;
+    function frame(ts) {
+      if (start === null) start = ts;
+      var dt = ts - start;
+      ctx.clearRect(0, 0, W, H);
+      ctx.globalCompositeOperation = "lighter";
+      for (var k = 0; k < rings.length; k++) { var rg = rings[k]; rg.r += 9; rg.a *= 0.94; ctx.strokeStyle = "rgba(198,255,0," + rg.a.toFixed(3) + ")"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(cx, cy, rg.r, 0, 6.2832); ctx.stroke(); }
+      for (var p2 = 0; p2 < parts.length; p2++) { var p = parts[p2]; if (p.life <= 0) continue; p.x += p.vx; p.y += p.vy; p.vx *= 0.97; p.vy = p.vy * 0.97 + 0.05; p.life -= 0.012; ctx.fillStyle = (p.cyan ? "rgba(91,231,255," : "rgba(198,255,0,") + Math.max(0, p.life).toFixed(3) + ")"; ctx.beginPath(); ctx.arc(p.x, p.y, p.r * p.life + 0.3, 0, 6.2832); ctx.fill(); }
+      ctx.globalCompositeOperation = "source-over";
+      if (dt < 2400) raf = requestAnimationFrame(frame); else if (cv.parentNode) cv.parentNode.removeChild(cv);
+    }
+    raf = requestAnimationFrame(frame);
   }
 
   function verdict(pct, day) {
@@ -1377,6 +1436,12 @@
     if (action === "prev-day") { currentKey = keyOf(addDays(parseKey(currentKey), -1)); render(); }
     else if (action === "next-day") { if (parseKey(currentKey) < parseKey(todayKey())) { currentKey = keyOf(addDays(parseKey(currentKey), 1)); render(); } }
     else if (action === "today") { currentKey = todayKey(); render(); }
+  });
+
+  // tap the OS core to replay the celebration when today is complete (demo flex)
+  document.getElementById("core").addEventListener("click", function () {
+    var d = getDay(currentKey), sc = dayScore(d);
+    if (currentKey === todayKey() && sc.total > 0 && sc.pct >= 0.9) celebrate();
   });
 
   /* ---------- footer ---------- */

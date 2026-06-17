@@ -103,6 +103,8 @@
   .brand h1 { font-family: var(--display); font-weight: 700; letter-spacing: -0.03em; font-size: clamp(36px, 6vw, 60px); line-height: 0.94; margin-top: 4px; text-wrap: balance; }
   .brand h1 .accent { color: var(--lime); }
   .brand .sub { color: var(--ink-dim); font-size: 14.5px; margin-top: 8px; max-width: 42ch; text-wrap: pretty; }
+  .quip { font-family: var(--mono); font-size: 11.5px; line-height: 1.55; color: var(--ink-dim); margin-top: 12px; max-width: 50ch; }
+  .quip::before { content: "// "; color: var(--lime); opacity: 0.7; }
 
   /* ===== OS Core ===== */
   .core-block { display: flex; align-items: center; gap: 20px; }
@@ -509,6 +511,7 @@
         <div class="mark"><span class="led"></span> DAYBREAK <span class="v">// break the loop</span></div>
         <h1 id="greeting">Good<span class="accent">.</span></h1>
         <p class="sub" id="tagline">Wake up. Move. Build. Live. One honest day at a time.</p>
+        <p class="quip" id="quip"></p>
       </div>
 
       <div class="core-block">
@@ -587,6 +590,29 @@
     "You don't need motivation today, just the first rep.",
     "The only way out of the loop is through the reps.",
     "No risk, no story."
+  ];
+  // rotating "system note" up top — swaps on every open (kept aimed at the user / the grind)
+  var QUIPS = [
+    "Morning wood's got more ambition than you do. Embarrassing.",
+    "You edged for 45 minutes last night — longest cardio you've done all week.",
+    "Your right forearm is the only muscle on a consistent program.",
+    "You finish in 90 seconds but can't finish your to-do list. Fascinating.",
+    "Your search history could make a priest relapse. Go run.",
+    "You bust faster than your New Year's resolutions.",
+    "You jerk off to productivity podcasts and still get nothing done. Incredible.",
+    "Attention span of a squirrel on an 8-ball. Lock in.",
+    "You came, you saw, you took a nap. Absolute Spartan.",
+    "Can't hold a plank or an erection past a minute. Train both.",
+    "You treat your goals like your situationship — all talk, zero commitment.",
+    "You scroll, you snooze, you stay broke. The holy trinity. Break it.",
+    "Search history needs a priest, a lawyer, and a personal trainer. Start with the trainer.",
+    "Carpal tunnel from one hobby, and it isn't typing.",
+    "Can't pace yourself at an open bar, but sure, lecture me on discipline.",
+    "Discipline of a stripper's schedule, follow-through of a gas-station condom.",
+    "Broke, baked, and benching the empty bar — the triple crown of letting yourself go.",
+    "Hungover, horny, and broke — congratulations, peak collegiate achieved.",
+    "Edged last night, edged your savings, edging your whole damn life. Finish something.",
+    "Blacking out: effortless. Waking up: a federal case. Get up."
   ];
 
   /* ---------- date helpers ---------- */
@@ -1424,6 +1450,14 @@
     document.getElementById("tagline").textContent = TAGLINES[idx];
   }
 
+  var lastQuip = -1;
+  function setQuip() {
+    var el = document.getElementById("quip"); if (!el) return;
+    var i; do { i = Math.floor(Math.random() * QUIPS.length); } while (QUIPS.length > 1 && i === lastQuip);
+    lastQuip = i;
+    el.textContent = QUIPS[i];
+  }
+
   /* ---------- pointer reactivity (waveform + panel proximity) ---------- */
   var pendingPointer = null, pointerScheduled = false;
   window.addEventListener("pointermove", function (e) {
@@ -1451,10 +1485,13 @@
   buildCore();
   buildVitals();
   setGreeting();
+  setQuip();
   render();
   updateUptime();
   setInterval(updateUptime, 1000);
   setInterval(setGreeting, 60000);
+  // swap the line whenever the app comes back to the foreground (covers reopening the PWA)
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) setQuip(); });
 })();
 </script>
   <script>

@@ -278,6 +278,7 @@
   .ampm { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
   .ampm button { font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--ink-faint); background: transparent; border: none; padding: 8px 11px; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background 0.2s var(--ease), color 0.2s var(--ease); }
   .ampm button.active { background: var(--indigo); color: #0a0710; }
+  .ampm button.sun.active { background: var(--lime); color: #0a0710; }
   .ampm button:not(.active):hover { color: var(--ink); }
   .ampm button:focus-visible { outline: 2px solid var(--indigo); outline-offset: -2px; }
   .rec-readout { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
@@ -304,7 +305,7 @@
   .armed .waketime small { font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.18em; color: var(--ink-faint); display: block; margin-bottom: 3px; font-weight: 400; }
 
   /* ===== diet ===== */
-  .diet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .diet-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
   .diet-cell { display: flex; align-items: center; gap: 11px; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: var(--radius-sm); padding: 13px 14px; cursor: pointer; transition: border-color 0.2s var(--ease), transform 0.12s var(--ease), box-shadow 0.2s; user-select: none; }
   .diet-cell:hover { border-color: var(--line); transform: translateY(-1px); }
   .diet-cell.on { border-color: rgba(var(--cyan-rgb), 0.4); box-shadow: inset 0 0 24px rgba(var(--cyan-rgb), 0.05); }
@@ -564,6 +565,7 @@
       <button class="fbtn" data-action="export">⬇ BACKUP</button>
       <button class="fbtn" data-action="import">⬆ RESTORE</button>
       <input type="file" id="importFile" accept="application/json" hidden />
+      <button class="fbtn" data-action="sound" id="soundBtn" aria-pressed="true">🔊 SOUND</button>
       <button class="fbtn danger" data-action="reset-day">CLEAR DAY</button>
       <div class="spacer"></div>
       <span class="tag" id="loggedTag">0 days logged</span>
@@ -630,7 +632,7 @@
       started: false, wakeTime: null,
       run:  { done: false, distance: "", duration: "" },
       lift: { done: false, note: "" },
-      diet: { protein: false, clean: false, hydrated: false, nojunk: false },
+      diet: { breakfast: false, lunch: false, dinner: false, snack: false },
       sleep: { bed: "", wake: "" },
       top3: [ { t: "", d: false }, { t: "", d: false }, { t: "", d: false } ],
       also: []
@@ -643,6 +645,7 @@
       var s = JSON.parse(raw);
       if (!s.days) s.days = {};
       if (!s.idSeq) s.idSeq = 1;
+      if (!s.settings) s.settings = {};
       return s;
     } catch (e) { return { days: {}, settings: {}, idSeq: 1 }; }
   }
@@ -658,6 +661,45 @@
     for (var f in def) if (!(f in d)) d[f] = def[f];
     return d;
   }
+
+  /* ---------- sound ---------- */
+  // tiny self-contained Web Audio synth — no files, works on iOS after a tap (every call sits inside a gesture)
+  var Sound = (function () {
+    var ctx = null, enabled = state.settings.sound !== false; // default ON
+    function ensure() {
+      if (!ctx) { try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+      if (ctx && ctx.state === "suspended") { try { ctx.resume(); } catch (e) {} }
+      return ctx;
+    }
+    function tone(freq, dur, type, vol, when, glideTo) {
+      var c = ensure(); if (!c) return;
+      var t0 = c.currentTime + (when || 0);
+      var osc = c.createOscillator(), g = c.createGain();
+      osc.type = type || "sine";
+      osc.frequency.setValueAtTime(freq, t0);
+      if (glideTo) { try { osc.frequency.exponentialRampToValueAtTime(glideTo, t0 + dur); } catch (e) {} }
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(vol || 0.1, t0 + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.connect(g); g.connect(c.destination);
+      osc.start(t0); osc.stop(t0 + dur + 0.03);
+    }
+    function play(name) {
+      if (!enabled) return;
+      switch (name) {
+        case "complete": tone(620, 0.09, "triangle", 0.10, 0); tone(950, 0.13, "triangle", 0.085, 0.05); break;
+        case "uncheck":  tone(340, 0.08, "sine", 0.055, 0); break;
+        case "boot":     tone(300, 0.16, "triangle", 0.09, 0, 660); tone(900, 0.20, "sine", 0.06, 0.10); break;
+        case "bed":      tone(320, 0.30, "sine", 0.075, 0, 150); break;
+        case "add":      tone(720, 0.06, "triangle", 0.06, 0); break;
+      }
+    }
+    return {
+      play: play,
+      setEnabled: function (v) { enabled = v; },
+      isEnabled: function () { return enabled; }
+    };
+  })();
 
   /* ---------- sleep ---------- */
   var SLEEP_TARGET = 8, SLEEP_OK = 7.75; // 8h goal, 15-min grace
@@ -691,7 +733,7 @@
       mm = p[1] ? p[1].replace(/[^0-9]/g, "").slice(0, 2) : "";
     } else if (digits.length <= 2) { hh = digits; mm = ""; }
     else { hh = digits.slice(0, digits.length - 2); mm = digits.slice(-2); } // 930 -> 9:30
-    var t = mm ? (hh + ":" + mm) : hh;
+    var t = hh + ":" + (mm ? mm : "00");
     return t + " " + (mer || "PM");
   }
   function splitBed(bed) {
@@ -917,7 +959,7 @@
     var day = getDay(currentKey);
     var isToday = currentKey === todayKey();
 
-    app.innerHTML = [ movementCard(day), fuelCard(day), planCard(day), momentumCard() ].join("");
+    app.innerHTML = [ planCard(day), movementCard(day), fuelCard(day), momentumCard() ].join("");
 
     var d = parseKey(currentKey);
     var label = isToday ? "Today" : (currentKey === keyOf(addDays(new Date(), -1)) ? "Yesterday" : DOW[d.getDay()]);
@@ -958,7 +1000,7 @@
   function recoveryBlock(day) {
     var sb = splitBed(day.sleep ? day.sleep.bed : "");
     var hasBed = !!(day.sleep && day.sleep.bed && parseClock(day.sleep.bed) != null);
-    var wake = day.wakeTime ? esc(day.wakeTime) : (day.started ? "Online" : "Tap when up");
+    var sw = day.wakeTime ? splitBed(day.wakeTime) : { t: "", mer: "AM" };
     // "Going to bed" forward-log: a bedtime logged now belongs to the sleep that ends the
     // NEXT morning — evening taps go to tomorrow's record, after-midnight taps to today's.
     var bedNow = "";
@@ -989,7 +1031,15 @@
         '</div>' +
         '<div class="rec-cell">' +
           '<button class="orb sun ' + (day.started ? "on" : "") + '" data-action="toggle-started" aria-label="Wake up — boot the day">' + SUN + '</button>' +
-          '<div class="rec-info"><span class="rl">Wake up</span><span class="wake-val">' + wake + '</span></div>' +
+          '<div class="rec-info"><span class="rl">Wake up</span>' +
+            '<div class="bedtime">' +
+              '<input class="mini bednum" data-field="wake-num" placeholder="7:00" value="' + esc(sw.t) + '" inputmode="numeric" aria-label="Wake time" />' +
+              '<div class="ampm" role="group" aria-label="AM or PM">' +
+                '<button data-action="wake-ampm" data-v="AM" class="sun ' + (sw.mer === "AM" ? "active" : "") + '" aria-pressed="' + (sw.mer === "AM") + '">AM</button>' +
+                '<button data-action="wake-ampm" data-v="PM" class="sun ' + (sw.mer === "PM" ? "active" : "") + '" aria-pressed="' + (sw.mer === "PM") + '">PM</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
         '</div>' +
       '</div>' +
       '<div class="rec-readout">' +
@@ -1003,17 +1053,17 @@
 
   function fuelCard(day) {
     var cells = [
-      ["protein", "Protein", "hit your target"],
-      ["clean", "Ate clean", "real, whole food"],
-      ["hydrated", "Hydrated", "water all day"],
-      ["nojunk", "No junk", "skipped the trash"]
+      ["breakfast", "Breakfast", "fuel up"],
+      ["lunch", "Lunch", "midday plate"],
+      ["dinner", "Dinner", "evening plate"],
+      ["snack", "Snack", "in between"]
     ].map(function (c) {
       var on = day.diet[c[0]];
       return '<div class="diet-cell ' + (on ? "on" : "") + '" data-action="toggle-diet" data-diet="' + c[0] + '" role="checkbox" aria-checked="' + on + '" tabindex="0">' +
         '<button class="check cyan ' + (on ? "on" : "") + '" tabindex="-1">' + checkSvg() + "</button>" +
         '<div><div class="dc-label">' + c[1] + '</div><div class="dc-sub">' + c[2] + "</div></div></div>";
     }).join("");
-    return '<section class="panel">' +
+    return '<section class="panel span2">' +
       '<span class="glow" style="background:var(--cyan)"></span>' +
       '<div class="phead"><div class="title"><span class="stat-led" id="led-fuel"></span> Fuel</div><div class="meta" id="fuelMeta"></div></div>' +
       '<div class="diet-grid">' + cells + "</div></section>";
@@ -1035,7 +1085,7 @@
             '<button class="del" data-action="del-also" data-id="' + a.id + '" title="Remove" aria-label="Remove task">✕</button></div>';
         }).join("")
       : '<div class="empty-note">Nothing else on deck. Add the smaller stuff here.</div>';
-    return '<section class="panel">' +
+    return '<section class="panel span2">' +
       '<span class="glow" style="background:var(--lime)"></span>' +
       '<div class="phead"><div class="title"><span class="stat-led" id="led-plan"></span> The Big 3</div><div class="meta">NON-NEGOTIABLES</div></div>' +
       '<div class="top3">' + rows + "</div>" +
@@ -1055,7 +1105,7 @@
       '<div class="streak-row">' +
         '<div class="streak">' + ICON_FLAME + '<div class="num lime" id="streakWorkout" data-target="' + ws + '">0<span class="unit">DAYS</span></div><div class="lab">Workout streak<br>cardio or lift</div></div>' +
         '<div class="streak">' + ICON_MOON + '<div class="num indigo" id="streakSleep" data-target="' + ss + '">0<span class="unit">DAYS</span></div><div class="lab">Sleep streak<br>8h+ nights</div></div>' +
-        '<div class="streak">' + ICON_LEAF + '<div class="num cyan" id="streakDiet" data-target="' + ds + '">0<span class="unit">DAYS</span></div><div class="lab">Diet on-track<br>3+ fuel checks</div></div>' +
+        '<div class="streak">' + ICON_LEAF + '<div class="num cyan" id="streakDiet" data-target="' + ds + '">0<span class="unit">DAYS</span></div><div class="lab">Meals on-track<br>3+ logged</div></div>' +
         '<div class="streak">' + ICON_BOLT + '<div class="num white" id="streakTotal" data-target="' + dl + '">0<span class="unit">TOTAL</span></div><div class="lab">Days you<br>showed up</div></div>' +
       "</div>" +
       '<div class="scope"><div class="scope-head"><span class="st">Signal · last 21 days</span><span class="sv" id="scopeAvg">avg 0%</span></div>' +
@@ -1196,7 +1246,7 @@
     document.getElementById("coreMsg").textContent = st.msg;
     document.body.dataset.state = st.key;
 
-    var fm = document.getElementById("fuelMeta"); if (fm) fm.textContent = dietCount(day) + "/4 CLEAN";
+    var fm = document.getElementById("fuelMeta"); if (fm) fm.textContent = dietCount(day) + "/4 MEALS";
 
     setLed("led-engine", movementDone(day) ? "live" : (day.started ? "cyan" : ""));
     setLed("led-fuel", dietOnTrack(day) ? "cyan" : "");
@@ -1307,18 +1357,19 @@
         day.started = !day.started;
         if (day.started && !day.wakeTime) day.wakeTime = nowTime();
         if (day.started && day.sleep && !day.sleep.wake) day.sleep.wake = day.wakeTime;
+        Sound.play(day.started ? "boot" : "uncheck");
         save(); render();
         if (day.started && !REDUCE) { var sb = document.querySelector(".orb.sun"); if (sb) { sb.classList.add("flash"); var rs = sb.getBoundingClientRect(); Wave.pulse(rs.left + rs.width / 2, rs.top + rs.height / 2, false); } }
         return;
       case "toggle-run":
-        day.run.done = !day.run.done; pulse(t); if (day.run.done) energize(t, false); save();
+        day.run.done = !day.run.done; pulse(t); if (day.run.done) energize(t, false); Sound.play(day.run.done ? "complete" : "uncheck"); save();
         t.classList.toggle("on", day.run.done); t.closest(".row").classList.toggle("done", day.run.done); updateDerived(); return;
       case "toggle-lift":
-        day.lift.done = !day.lift.done; pulse(t); if (day.lift.done) energize(t, false); save();
+        day.lift.done = !day.lift.done; pulse(t); if (day.lift.done) energize(t, false); Sound.play(day.lift.done ? "complete" : "uncheck"); save();
         t.classList.toggle("on", day.lift.done); t.closest(".row").classList.toggle("done", day.lift.done); updateDerived(); return;
       case "toggle-diet": {
         var key = t.getAttribute("data-diet");
-        day.diet[key] = !day.diet[key]; save();
+        day.diet[key] = !day.diet[key]; Sound.play(day.diet[key] ? "complete" : "uncheck"); save();
         t.classList.toggle("on", day.diet[key]); t.setAttribute("aria-checked", day.diet[key]);
         var cb = t.querySelector(".check"); if (cb) cb.classList.toggle("on", day.diet[key]);
         pulse(cb); if (day.diet[key]) energize(cb, true);
@@ -1326,13 +1377,13 @@
       }
       case "toggle-top3": {
         var i = +t.getAttribute("data-i");
-        day.top3[i].d = !day.top3[i].d; pulse(t); if (day.top3[i].d) energize(t, false); save();
+        day.top3[i].d = !day.top3[i].d; pulse(t); if (day.top3[i].d) energize(t, false); Sound.play(day.top3[i].d ? "complete" : "uncheck"); save();
         t.classList.toggle("on", day.top3[i].d); t.closest(".pri").classList.toggle("on", day.top3[i].d); updateDerived(); return;
       }
       case "toggle-also": {
         var id = +t.getAttribute("data-id");
         var a = day.also.filter(function (x) { return x.id === id; })[0];
-        if (a) { a.d = !a.d; pulse(t); if (a.d) energize(t, false); save(); t.classList.toggle("on", a.d); t.closest(".also-item").classList.toggle("done", a.d); updateDerived(); }
+        if (a) { a.d = !a.d; pulse(t); if (a.d) energize(t, false); Sound.play(a.d ? "complete" : "uncheck"); save(); t.classList.toggle("on", a.d); t.closest(".also-item").classList.toggle("done", a.d); updateDerived(); }
         return;
       }
       case "bed-now": goingToBedNow(); return;
@@ -1340,8 +1391,19 @@
         var grp = t.parentNode;
         var btns = grp.getElementsByTagName("button");
         for (var bi = 0; bi < btns.length; bi++) { var b = btns[bi]; var on = b === t; b.classList.toggle("active", on); b.setAttribute("aria-pressed", on); }
-        var numEl = document.querySelector(".bednum");
+        var cellB = t.closest(".rec-cell");
+        var numEl = cellB && cellB.querySelector('input[data-field="sleep-bednum"]');
         day.sleep.bed = composeBed(numEl ? numEl.value : "", t.getAttribute("data-v"));
+        save(); updateDerived(); return;
+      }
+      case "wake-ampm": {
+        var grpw = t.parentNode;
+        var btnsw = grpw.getElementsByTagName("button");
+        for (var wi = 0; wi < btnsw.length; wi++) { var wb = btnsw[wi]; var won = wb === t; wb.classList.toggle("active", won); wb.setAttribute("aria-pressed", won); }
+        var cellW = t.closest(".rec-cell");
+        var numW = cellW && cellW.querySelector('input[data-field="wake-num"]');
+        var wtv = composeBed(numW ? numW.value : "", t.getAttribute("data-v"));
+        day.wakeTime = wtv || null; if (day.sleep) day.sleep.wake = wtv;
         save(); updateDerived(); return;
       }
       case "add-also": addAlso(); return;
@@ -1366,6 +1428,7 @@
     var key = now.getHours() >= 12 ? keyOf(addDays(now, 1)) : todayKey();
     var d = getDay(key);
     d.sleep.bed = nowTime();
+    Sound.play("bed");
     save();
     render();
     if (!REDUCE) {
@@ -1380,6 +1443,7 @@
     var text = (input.value || "").trim(); if (!text) { input.focus(); return; }
     var day = getDay(currentKey);
     day.also.push({ id: state.idSeq++, text: text, area: area.value, d: false });
+    Sound.play("add");
     save(); render();
     var ni = document.getElementById("alsoInput"); if (ni) ni.focus();
   }
@@ -1390,7 +1454,8 @@
     if (field === "run-distance") day.run.distance = f.value;
     else if (field === "run-duration") day.run.duration = f.value;
     else if (field === "lift-note") day.lift.note = f.value;
-    else if (field === "sleep-bednum") { var _m = document.querySelector(".ampm button.active"); day.sleep.bed = composeBed(f.value, _m ? _m.getAttribute("data-v") : "PM"); }
+    else if (field === "sleep-bednum") { var _c = f.closest(".rec-cell"); var _m = _c && _c.querySelector(".ampm button.active"); day.sleep.bed = composeBed(f.value, _m ? _m.getAttribute("data-v") : "PM"); }
+    else if (field === "wake-num") { var _cw = f.closest(".rec-cell"); var _mw = _cw && _cw.querySelector(".ampm button.active"); var _wt = composeBed(f.value, _mw ? _mw.getAttribute("data-v") : "AM"); day.wakeTime = _wt || null; if (day.sleep) day.sleep.wake = _wt; }
     else if (field === "top3-text") { day.top3[+f.getAttribute("data-i")].t = f.value; }
     save(); updateDerived();
   });
@@ -1412,7 +1477,23 @@
     if (action === "export") exportData();
     else if (action === "import") document.getElementById("importFile").click();
     else if (action === "reset-day") resetDay();
+    else if (action === "sound") toggleSound();
   });
+
+  function syncSoundBtn() {
+    var btn = document.getElementById("soundBtn"); if (!btn) return;
+    var on = Sound.isEnabled();
+    btn.textContent = on ? "🔊 SOUND" : "🔇 MUTED";
+    btn.setAttribute("aria-pressed", on);
+  }
+  function toggleSound() {
+    var on = !Sound.isEnabled();
+    Sound.setEnabled(on);
+    state.settings.sound = on;
+    save(); syncSoundBtn();
+    if (on) Sound.play("complete"); // give a confirming blip when turning it back on
+    else toast("Sound off");
+  }
 
   function exportData() {
     var blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
@@ -1486,6 +1567,7 @@
   buildVitals();
   setGreeting();
   setQuip();
+  syncSoundBtn();
   render();
   updateUptime();
   setInterval(updateUptime, 1000);

@@ -263,7 +263,7 @@
   .orb.sun.on svg { stroke: #0a0710; }
   .orb.moon.flash { animation: moonPulse 0.6s var(--ease); }
   .orb.sun.flash { animation: sunPulse 0.6s var(--ease); }
-  .rec-cell .orb.moon { cursor: default; pointer-events: none; }
+  .rec-cell .orb.moon { cursor: pointer; }
   .bed-now { display: flex; align-items: center; gap: 11px; width: 100%; margin-top: 12px; padding: 13px 16px; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; color: var(--ink); font-family: var(--body); background: linear-gradient(120deg, rgba(var(--indigo-rgb), 0.08), transparent 60%), var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), transform 0.12s var(--ease); }
   .bed-now svg { width: 21px; height: 21px; flex: none; }
   .bed-now .bn-label { font-weight: 600; font-size: 14.5px; }
@@ -1008,18 +1008,19 @@
       var upKey = (new Date().getHours() >= 12) ? keyOf(addDays(new Date(), 1)) : todayKey();
       var upBed = (state.days[upKey] && state.days[upKey].sleep) ? state.days[upKey].sleep.bed : "";
       var setNow = !!(upBed && parseClock(upBed) != null);
+      var upName = upKey === todayKey() ? "this morning" : DOW[parseKey(upKey).getDay()] + " morning";
       bedNow =
-        '<button class="bed-now ' + (setNow ? "set" : "") + '" data-action="bed-now" aria-label="I am going to bed now">' +
+        '<button class="bed-now ' + (setNow ? "set" : "") + '" data-action="bed-now" aria-label="I am going to bed now — log tonight for tomorrow">' +
           MOON +
           '<span class="bn-label">' + (setNow ? ("Lights out · " + esc(upBed)) : "I’m going to bed") + '</span>' +
-          '<span class="bn-hint">' + (setNow ? "logged · tap to update" : "logs tonight’s sleep") + '</span>' +
+          '<span class="bn-hint">' + (setNow ? ("counts for " + upName + " · tap to update") : ("logs tonight → " + upName)) + '</span>' +
         '</button>';
     }
     return '<div class="recovery">' +
       '<div class="rec-pair">' +
         '<div class="rec-cell">' +
-          '<span class="orb moon ' + (hasBed ? "set" : "") + '" aria-hidden="true">' + MOON + '</span>' +
-          '<div class="rec-info"><span class="rl">Bedtime</span>' +
+          '<button class="orb moon ' + (hasBed ? "set" : "") + '" data-action="set-bed-now" aria-label="Tap when you get in bed — logs the current time" title="Tap when you get in bed">' + MOON + '</button>' +
+          '<div class="rec-info"><span class="rl">Bedtime · tap moon = now</span>' +
             '<div class="bedtime">' +
               '<input class="mini bednum" data-field="sleep-bednum" placeholder="9:30" value="' + esc(sb.t) + '" inputmode="numeric" aria-label="Bedtime" />' +
               '<div class="ampm" role="group" aria-label="AM or PM">' +
@@ -1384,6 +1385,14 @@
         var id = +t.getAttribute("data-id");
         var a = day.also.filter(function (x) { return x.id === id; })[0];
         if (a) { a.d = !a.d; pulse(t); if (a.d) energize(t, false); Sound.play(a.d ? "complete" : "uncheck"); save(); t.classList.toggle("on", a.d); t.closest(".also-item").classList.toggle("done", a.d); updateDerived(); }
+        return;
+      }
+      case "set-bed-now": {
+        day.sleep.bed = nowTime();
+        Sound.play("bed");
+        save(); render();
+        if (!REDUCE) { var mo = document.querySelector(".rec-cell .orb.moon"); if (mo) { mo.classList.add("flash"); var rmo = mo.getBoundingClientRect(); Wave.pulse(rmo.left + rmo.width / 2, rmo.top + rmo.height / 2, true); } }
+        toast("Bedtime logged · " + day.sleep.bed);
         return;
       }
       case "bed-now": goingToBedNow(); return;

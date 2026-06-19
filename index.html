@@ -266,8 +266,9 @@
   .rec-cell .orb.moon { cursor: pointer; }
   .bed-now { display: flex; align-items: center; gap: 11px; width: 100%; margin-top: 12px; padding: 13px 16px; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; color: var(--ink); font-family: var(--body); background: linear-gradient(120deg, rgba(var(--indigo-rgb), 0.08), transparent 60%), var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease), transform 0.12s var(--ease); }
   .bed-now svg { width: 21px; height: 21px; flex: none; }
-  .bed-now .bn-label { font-weight: 600; font-size: 14.5px; }
-  .bed-now .bn-hint { margin-left: auto; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); white-space: nowrap; }
+  .bed-now .bn-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+  .bed-now .bn-label { font-weight: 600; font-size: 14.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bed-now .bn-hint { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); line-height: 1.4; }
   .bed-now:hover { border-color: rgba(var(--indigo-rgb), 0.5); transform: translateY(-1px); box-shadow: 0 0 0 4px rgba(var(--indigo-rgb), 0.07); }
   .bed-now:focus-visible { outline: 2px solid var(--indigo); outline-offset: 2px; }
   .bed-now.set { border-color: rgba(var(--indigo-rgb), 0.42); box-shadow: inset 0 0 26px rgba(var(--indigo-rgb), 0.06); }
@@ -401,6 +402,18 @@
 
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: #fff; color: var(--bg); padding: 12px 20px; border-radius: 11px; font-family: var(--mono); font-weight: 600; font-size: 13px; letter-spacing: 0.02em; opacity: 0; pointer-events: none; transition: all 0.3s var(--ease); z-index: var(--z-toast); box-shadow: 0 24px 60px -20px #000; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ===== reminders modal ===== */
+  .nmodal { position: fixed; inset: 0; z-index: var(--z-toast); display: grid; place-items: center; background: rgba(0,0,0,0.72); padding: 22px; backdrop-filter: blur(4px); }
+  .nmodal .box { width: 100%; max-width: 460px; background: linear-gradient(168deg, var(--surface), var(--bg-2)); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; box-shadow: 0 30px 90px -30px #000; }
+  .nmodal h3 { font-family: var(--display); font-weight: 700; font-size: 18px; margin-bottom: 9px; }
+  .nmodal p { font-size: 13px; color: var(--ink-dim); margin-bottom: 13px; line-height: 1.55; }
+  .nmodal textarea { width: 100%; height: 116px; background: rgba(0,0,0,0.45); border: 1px solid var(--line); border-radius: 10px; color: var(--ink-dim); font-family: var(--mono); font-size: 10px; line-height: 1.4; padding: 11px; resize: none; }
+  .nmodal .nbtns { display: flex; gap: 9px; margin-top: 13px; }
+  .nmodal .nbtns button { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: 0.03em; cursor: pointer; transition: transform 0.15s var(--ease), box-shadow 0.2s; }
+  .nmodal .nbtns button:hover { transform: translateY(-1px); }
+  .nmodal .nbtns button.primary { background: var(--lime); color: var(--bg); border-color: var(--lime); }
+  .nmodal .nbtns button.primary:hover { box-shadow: 0 0 16px rgba(var(--lime-rgb), 0.45); }
 
   /* ===== boot splash ===== */
   #boot { position: fixed; inset: 0; z-index: var(--z-boot); display: grid; place-items: center; overflow: hidden; background: radial-gradient(120% 90% at 50% 58%, #0a0f05, #050505 72%); }
@@ -566,6 +579,7 @@
       <button class="fbtn" data-action="import">⬆ RESTORE</button>
       <input type="file" id="importFile" accept="application/json" hidden />
       <button class="fbtn" data-action="sound" id="soundBtn" aria-pressed="true">🔊 SOUND</button>
+      <button class="fbtn" data-action="notify" id="notifyBtn">🔔 REMINDERS</button>
       <button class="fbtn danger" data-action="reset-day">CLEAR DAY</button>
       <div class="spacer"></div>
       <span class="tag" id="loggedTag">0 days logged</span>
@@ -1012,8 +1026,10 @@
       bedNow =
         '<button class="bed-now ' + (setNow ? "set" : "") + '" data-action="bed-now" aria-label="I am going to bed now — log tonight for tomorrow">' +
           MOON +
-          '<span class="bn-label">' + (setNow ? ("Lights out · " + esc(upBed)) : "I’m going to bed") + '</span>' +
-          '<span class="bn-hint">' + (setNow ? ("counts for " + upName + " · tap to update") : ("logs tonight → " + upName)) + '</span>' +
+          '<span class="bn-text">' +
+            '<span class="bn-label">' + (setNow ? ("Lights out · " + esc(upBed)) : "I’m going to bed") + '</span>' +
+            '<span class="bn-hint">' + (setNow ? ("counts for " + upName + " · tap to update") : ("logs tonight → " + upName)) + '</span>' +
+          '</span>' +
         '</button>';
     }
     return '<div class="recovery">' +
@@ -1487,6 +1503,7 @@
     else if (action === "import") document.getElementById("importFile").click();
     else if (action === "reset-day") resetDay();
     else if (action === "sound") toggleSound();
+    else if (action === "notify") enableReminders();
   });
 
   function syncSoundBtn() {
@@ -1502,6 +1519,64 @@
     save(); syncSoundBtn();
     if (on) Sound.play("complete"); // give a confirming blip when turning it back on
     else toast("Sound off");
+  }
+
+  /* ---------- push reminders ---------- */
+  var VAPID_PUBLIC = "BNVyziXGUM_PlO48_Q_QozfT6886u_Sftr1f5jxBzS--TgvUhiQHVyTtKl4AFSnC4Judw6RGzc-2LpimMvmSgio";
+  function urlB64ToUint8(base64) {
+    var pad = "=".repeat((4 - (base64.length % 4)) % 4);
+    var b64 = (base64 + pad).replace(/-/g, "+").replace(/_/g, "/");
+    var raw = atob(b64), arr = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr;
+  }
+  function syncNotifyBtn() {
+    var b = document.getElementById("notifyBtn"); if (!b) return;
+    var on = ("Notification" in window) && Notification.permission === "granted";
+    b.textContent = on ? "🔔 REMINDERS ✓" : "🔔 REMINDERS";
+  }
+  function enableReminders() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+      toast("This device can’t do push reminders"); return;
+    }
+    Notification.requestPermission().then(function (perm) {
+      if (perm !== "granted") { toast("Allow notifications to get reminders"); return; }
+      navigator.serviceWorker.ready.then(function (reg) {
+        return reg.pushManager.getSubscription().then(function (existing) {
+          return existing || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(VAPID_PUBLIC) });
+        });
+      }).then(function (sub) {
+        Sound.play("complete"); syncNotifyBtn();
+        showSubModal(JSON.stringify(sub));
+      }).catch(function (e) { toast("Couldn’t enable: " + (e.message || e)); });
+    });
+  }
+  function showSubModal(json) {
+    var m = document.createElement("div");
+    m.className = "nmodal";
+    m.innerHTML =
+      '<div class="box">' +
+        '<h3>🔔 Reminders armed</h3>' +
+        '<p>Last one-time step: copy this code and send it to Tim, so the nightly reminders can reach this device. Then you’re all set.</p>' +
+        '<textarea readonly id="subText">' + esc(json) + '</textarea>' +
+        '<div class="nbtns">' +
+          '<button class="primary" id="subCopy">Copy code</button>' +
+          '<button id="subClose">Done</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(m);
+    var ta = m.querySelector("#subText");
+    m.querySelector("#subCopy").addEventListener("click", function () {
+      try { ta.focus(); ta.select(); ta.setSelectionRange(0, json.length); } catch (e) {}
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(json).then(function () { toast("Copied — send it to Tim"); }, function () {
+          try { document.execCommand("copy"); toast("Copied — send it to Tim"); } catch (e) {}
+        });
+      } else { try { document.execCommand("copy"); toast("Copied — send it to Tim"); } catch (e) {} }
+    });
+    function close() { if (m.parentNode) m.parentNode.removeChild(m); }
+    m.querySelector("#subClose").addEventListener("click", close);
+    m.addEventListener("click", function (e) { if (e.target === m) close(); });
   }
 
   function exportData() {
@@ -1577,6 +1652,7 @@
   setGreeting();
   setQuip();
   syncSoundBtn();
+  syncNotifyBtn();
   render();
   updateUptime();
   setInterval(updateUptime, 1000);

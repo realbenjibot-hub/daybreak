@@ -53,3 +53,31 @@ self.addEventListener("fetch", function (e) {
     );
   }
 });
+
+/* ===== Push reminders ===== */
+self.addEventListener("push", function (e) {
+  var data = {};
+  try { data = e.data ? e.data.json() : {}; }
+  catch (err) { try { data = { body: e.data.text() }; } catch (e2) { data = {}; } }
+  var title = data.title || "Daybreak";
+  var opts = {
+    body: data.body || "",
+    icon: "./icon-512.png",
+    badge: "./icon-512.png",
+    tag: data.tag || "daybreak",
+    renotify: true,
+    data: { url: data.url || "./" }
+  };
+  e.waitUntil(self.registration.showNotification(title, opts));
+});
+
+self.addEventListener("notificationclick", function (e) {
+  e.notification.close();
+  var target = (e.notification.data && e.notification.data.url) || "./";
+  e.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (list) {
+      for (var i = 0; i < list.length; i++) { if ("focus" in list[i]) return list[i].focus(); }
+      if (self.clients.openWindow) return self.clients.openWindow(target);
+    })
+  );
+});

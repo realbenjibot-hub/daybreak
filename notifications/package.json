@@ -1,0 +1,9 @@
+{
+  "name": "daybreak-notifications",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Scheduled web-push reminders for Daybreak (runs in GitHub Actions).",
+  "dependencies": {
+    "web-push": "^3.6.7"
+  }
+}

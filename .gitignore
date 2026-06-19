@@ -2,3 +2,5 @@ index.backup.html
 index.backup2.html
 __*
 .DS_Store
+node_modules/
+notifications/package-lock.json

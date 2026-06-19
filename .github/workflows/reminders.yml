@@ -1,0 +1,40 @@
+name: Daybreak reminders
+
+on:
+  schedule:
+    # Every hour on the hour (UTC). send.js gates on America/New_York local
+    # time, so DST is handled correctly — this fires the 7 AM / 4 PM / 7 PM /
+    # 10 PM ET reminders without seasonal drift.
+    - cron: "0 * * * *"
+  workflow_dispatch:
+    inputs:
+      force_reminder:
+        description: "ET hour to force-send for testing (7, 16, 19, or 22)"
+        required: false
+        default: ""
+
+# Don't pile up runs if one is slow.
+concurrency:
+  group: daybreak-reminders
+  cancel-in-progress: false
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install deps
+        working-directory: notifications
+        run: npm install --no-audit --no-fund
+      - name: Send due reminder
+        working-directory: notifications
+        env:
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          PUSH_SUBSCRIPTION: ${{ secrets.PUSH_SUBSCRIPTION }}
+          FORCE_REMINDER: ${{ github.event.inputs.force_reminder }}
+        run: node send.js

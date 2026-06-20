@@ -37,20 +37,53 @@ function etHour() {
   return parseInt(fmt.format(new Date()), 10) % 24;
 }
 
-// hour (ET) -> reminder payload
-const REMINDERS = {
-  7:  { tag: "morning", title: "☀️ Boot the day",  body: "Wake up, log your sleep, set your Big 3. Let's go, Caden." },
-  16: { tag: "workout", title: "⚡ Did you move today?", body: "Get the run or lift in before the day gets away from you." },
-  19: { tag: "meals",   title: "🍽️ Log your meals", body: "Cross off breakfast, lunch, dinner, snack." },
-  22: { tag: "bedtime", title: "🌙 Wind down",     body: "Tap the moon when you get in bed. Eight hours starts now." }
+// hour (ET) -> crude nag. The cron runs hourly; only these slots fire, so 11 PM–7 AM
+// stays quiet. Each slot has a few lines that rotate daily so it isn't the same roast.
+const SLOTS = {
+  8:  { tag: "wake",    title: "☀️ Boot up, chud", lines: [
+        "Up. Log your sleep, set your Big 3, quit wasting daylight.",
+        "Morning wood's got more ambition than you. Tap the sun and move.",
+        "You're not tired, you're undisciplined. Boot the day." ] },
+  10: { tag: "am-move", title: "⚡ Move, chud", lines: [
+        "Two hours up and nothing logged? The run won't run itself.",
+        "Get the cardio in before your excuses warm up.",
+        "Heart rate of a houseplant. Go get it up." ] },
+  12: { tag: "fuel",    title: "🍽️ Eat, chud", lines: [
+        "It's noon. Eat something real and cross off a meal.",
+        "Fuel isn't optional. Log breakfast and lunch, you gremlin.",
+        "Running on cope and caffeine again? Eat. Log it." ] },
+  14: { tag: "pm-move", title: "⚡ Still nothing?", lines: [
+        "Half the day gone, chud. Run or lift — pick one and do it.",
+        "Your to-do list is collecting dust. So are your shoes.",
+        "Edged your whole afternoon away. Go sweat instead." ] },
+  16: { tag: "lift",    title: "🏋️ Lift, chud", lines: [
+        "Did you lift, or just lift excuses today?",
+        "The bar's lonely. Go put it to use.",
+        "Strength session or another nap, chud? Choose violence." ] },
+  18: { tag: "dinner",  title: "🍽️ Fuel check", lines: [
+        "Dinner's a meal, not a personality. Eat and log it.",
+        "Cross off your meals before you forget you're a human.",
+        "Protein, chud. Not just vibes." ] },
+  20: { tag: "big3",    title: "🎯 Big 3 — done?", lines: [
+        "Big 3 finished, or coasting again, chud?",
+        "Three things. THREE. Knock them out before bed.",
+        "All talk today? Prove it — close out your Big 3." ] },
+  22: { tag: "bed",     title: "🌙 Wind down", lines: [
+        "Tap the moon and sleep before you doomscroll into oblivion.",
+        "Bed, chud. Eight hours starts the second you stop scrolling.",
+        "Lights out. Tomorrow's you is begging you not to stay up." ] }
 };
 
 const hour = FORCE !== "" ? (parseInt(FORCE, 10) % 24) : etHour();
-const r = REMINDERS[hour];
-if (!r) { console.log("No reminder scheduled for ET hour " + hour + "."); process.exit(0); }
+const slot = SLOTS[hour];
+if (!slot) { console.log("No nag scheduled for ET hour " + hour + " (quiet hours)."); process.exit(0); }
+
+// rotate the line daily (and offset by hour) so the same one doesn't repeat
+const etDayIndex = Math.floor(new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" })).getTime() / 86400000);
+const r = { tag: slot.tag, title: slot.title, body: slot.lines[(etDayIndex + hour) % slot.lines.length] };
 
 (async () => {
-  const payload = JSON.stringify({ title: r.title, body: r.body, tag: r.tag, url: "./" });
+  const payload = JSON.stringify({ title: r.title, body: r.body, tag: "daybreak", url: "./" });
   let ok = 0;
   let expired = 0;
   for (const sub of subs) {

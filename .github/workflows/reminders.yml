@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       force_reminder:
-        description: "ET hour to force-send for testing (7, 16, 19, or 22)"
+        description: "ET hour to force-send for testing (8/10/12/14/16/18/20/22)"
         required: false
         default: ""
 
